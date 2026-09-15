@@ -28,6 +28,7 @@ rows because the serving engine changes prefill throughput.
 | `amd/vllm`    | AMD GPU · vLLM             | rocm v0.7.0          | 2 | Qwen3-32B               | 15928 ‡ |
 | `amd/sglang`  | AMD GPU · SGLang          | v0.5.13.post1 (rocm) | 2 | Qwen3-32B               | 30720 ‡ |
 | `metax/vllm` | MetaX C500X 64 GB · vLLM-MetaX | 0.24.0 (MACA 3.8.2.1) | 8 | DeepSeek-R1-Distill-Llama-70B | **5468** |
+| `metax/sglang` | MetaX C500X 64 GB · SGLang | 0.5.12 (MACA 3.8.2.7) | 1 | Qwen3-0.6B | re-measure |
 | `tpu/v6/vllm` | Google TPU v6e · vLLM     | tpu v0.22.0          | 8 | Qwen3-32B               | **26290** |
 | `tpu/v7/vllm` | Google TPU v7x · vLLM     | tpu v0.22.0          | 8 | Qwen3-32B               | **27336** |
 | `npu/vllm`  | Rebellions NPU · vLLM       | vllm-rbln 0.11.3a7 | 1 | gpt-oss-120B          | **12582** |
@@ -52,6 +53,9 @@ rows because the serving engine changes prefill throughput.
   TP=8, `CHUNK_SIZE=4095`). The single-GPU value is the higher of two valid runs
   (5361 and 5773 tokens/sec). The eight-GPU chunk size stays below that profile's
   `--max-model-len=4096` so the calibration prompt plus one output token fits.
+- **`metax/sglang`** — reduced Qwen3-0.6B / TP=1 aggregated overlay. Prefill
+  throughput is not yet calibrated; re-measure with `calibrate.sh` before relying
+  on the saturation-aware override. Do not reuse the `metax/vllm` 70B/14B numbers.
 - The other GPU/TPU paths run at the vLLM default `--max-num-batched-tokens=8192`, so
   calibrate those with `CHUNK_SIZE=8192`. **Re-measure** if you change TP, chunk size,
   quantization, or `--max-model-len` — those move the number more than the model identity does.

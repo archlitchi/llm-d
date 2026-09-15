@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decode
+spec:
+  replicas: 1
+  template:
+    spec:
+      hostIPC: true
+      runtimeClassName: metax
+      containers:
+        - name: modelserver
+          # MetaX SGLang 0.5.12's Mooncake engine defaults to RDMA. Intra-node
+          # C500X validation uses nvlink_intra; patch the engine before launch.
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              python3 -c "from pathlib import Path; p=Path('/opt/conda/lib/python3.12/site-packages/sglang/srt/distributed/device_communicators/mooncake_transfer_engine.py'); t=p.read_text(); t=t.replace('\"rdma\"','\"nvlink_intra\"',1); p.write_text(t)"
+              exec python3 -m sglang.launch_server \
+                --model-path=Qwen/Qwen3-0.6B \
+                --served-model-name=Qwen/Qwen3-0.6B \
+                --host=0.0.0.0 --port=8200 \
+                --disaggregation-mode=decode \
+                --disaggregation-transfer-backend=mooncake \
+                --tensor-parallel-size=1 \
+                --mem-fraction-static=0.8 \
+                --trust-remote-code --log-level=info --enable-metrics
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: llm-d-hf-token
+                  key: HF_TOKEN
+            - name: UCX_TLS
+              value: maca_ipc,maca_copy,tcp
+            - name: UCX_PROTO_ENABLE
+              value: "y"
+            - name: SGLANG_DISAGG_STAGING_BUFFER
+              value: "1"
+            - name: SGLANG_DISAGG_STAGING_BUFFER_SIZE_MB
+              value: "64"
+            - name: SGLANG_DISAGG_STAGING_POOL_SIZE_MB
+              value: "1024"
+            - name: SGLANG_MOONCAKE_CUSTOM_MEM_POOL
+              value: INTRA_NODE_NVLINK
+            - name: MC_INTRANODE_NVLINK
+              value: "true"
+          ports:
+            - name: modelserver
+              containerPort: 8200
+              protocol: TCP
+          securityContext:
+            capabilities:
+              add:
+                - IPC_LOCK
+            seccompProfile:
+              type: Unconfined
+          resources:
+            limits:
+              memory: 32Gi
+              metax-tech.com/gpu: "1"
+            requests:
+              cpu: "2"
+              memory: 8Gi
+              metax-tech.com/gpu: "1"
+          volumeMounts:
+            - mountPath: /dev/shm
+              name: shm
+          startupProbe:
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 180
+          livenessProbe:
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: modelserver
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 6
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Gi

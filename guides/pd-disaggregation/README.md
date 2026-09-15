@@ -54,7 +54,8 @@ This guide includes configuration for the following accelerators:
 | Google TPU          | `modelserver/tpu/v6/vllm/` & `modelserver/tpu/v7/vllm/` | GKE TPU (v6e & v7x), see [TPU Guide](./README.tpu.md) |
 | Google TPU (dynamic sub-slices) | `modelserver/tpu/v7/vllm-dynamic-slice/` | TPU7x sub-slices formed on demand via GKE dynamic slicing + Kueue TAS, see [TPU Guide](./README.tpu.md#pd-on-dynamic-tpu-sub-slices-tpu7x) |
 | AMD GPU             | `modelserver/amd/vllm/`    | AMD GPU, community contributed                           |
-| MetaX GPU           | `modelserver/metax/vllm/`  | MetaX C500X, community contributed. Reduced 1P+1D / Qwen3-14B / TP=1 for compatibility checks. |
+| MetaX GPU (vLLM)    | `modelserver/metax/vllm/`  | MetaX C500X, community contributed. Reduced 1P+1D / Qwen3-14B / TP=1 for compatibility checks. |
+| MetaX GPU (SGLang)  | `modelserver/metax/sglang/` | MetaX C500X, community contributed. Reduced 1P+1D / Qwen3-0.6B / TP=1 with Mooncake (`nvlink_intra`) for intra-node bring-up. |
 | Intel XPU           | `modelserver/xpu/vllm/`    | Intel Data Center GPU Max 1550+, community contributed   |
 | Intel XPU + RDMA    | `modelserver/xpu/vllm-rdma/` | Intel XPU with RDMA via UCX (`ib,rc,ze_copy`), requires RDMA DRA driver |
 
@@ -252,7 +253,7 @@ kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/g
 <details>
 <summary><h4>Deploying with SGLang</h4></summary>
 
-To run the disaggregated deployment with SGLang instead of vLLM, apply the SGLang overlay (available for NVIDIA GPU with `base`, `coreweave`, and `gke` infra providers):
+To run the disaggregated deployment with SGLang instead of vLLM, apply the SGLang overlay (available for NVIDIA GPU with `base`, `coreweave`, and `gke` infra providers, and for MetaX C500X):
 
 ```bash
 export INFRA_PROVIDER=base # base | coreweave | gke | cks-mooncake
@@ -260,10 +261,12 @@ export INFRA_PROVIDER=base # base | coreweave | gke | cks-mooncake
 kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/gpu/sglang/${INFRA_PROVIDER}
 ```
 
+For MetaX C500X, use `modelserver/metax/sglang/` (Mooncake, not NIXL) — see [Deploying on MetaX C500X](#deploying-on-metax-c500x) below.
+
 SGLang-specific notes:
 
-* **Engine flags**: prefill and decode pods launch with `--disaggregation-mode={prefill,decode}` and `--disaggregation-transfer-backend=nixl`. The decode pod's routing-proxy sidecar is configured with `--kv-connector=sglang`.
-* **Bootstrap server**: each prefill instance runs a bootstrap server on port `8998` (the default). To use a different port, set `SGLANG_BOOTSTRAP_PORT` on the sidecar and `--disaggregation-bootstrap-port` on the SGLang engine so the two match. P/D peers discover each other through this server rather than vLLM's peer-to-peer negotiation; the KV transfer itself still runs directly over NIXL/RDMA.
+* **Engine flags**: NVIDIA overlays launch with `--disaggregation-mode={prefill,decode}` and `--disaggregation-transfer-backend=nixl`. The MetaX overlay uses `--disaggregation-transfer-backend=mooncake`. The decode pod's routing-proxy sidecar is configured with `--kv-connector=sglang`.
+* **Bootstrap server**: each prefill instance runs a bootstrap server on port `8998` (the default). To use a different port, set `SGLANG_BOOTSTRAP_PORT` on the sidecar and `--disaggregation-bootstrap-port` on the SGLang engine so the two match. P/D peers discover each other through this server rather than vLLM's peer-to-peer negotiation; the KV transfer itself still runs directly over the configured backend (NIXL/RDMA on NVIDIA, Mooncake `nvlink_intra` on MetaX).
 * **Operations**: scale up/down, request cancellation, fault tolerance, and rollout behavior differ from vLLM. See [Disaggregated Serving: Operations (SGLang)](../../docs/operations/disaggregation/sglang.md).
 
 </details>
@@ -273,13 +276,13 @@ SGLang-specific notes:
 >
 > * Disaggregation lives in the llm-d Router (EPP) and is engine-agnostic, so SGLang P/D composes with the same prefix-cache-aware and load-aware routing as vLLM.
 > * SGLang P/D is **validated each release** on NVIDIA GPU but is not yet part of the nightly E2E CI that covers the vLLM path (the badges above).
-> * The SGLang P/D overlays are **NVIDIA GPU only** today; the AMD overlay (`modelserver/amd/vllm/`) and MetaX overlay (`modelserver/metax/vllm/`) provide vLLM P/D only.
+> * NVIDIA SGLang P/D uses the NIXL transfer backend. MetaX SGLang P/D (`modelserver/metax/sglang/`) uses Mooncake with an intra-node `nvlink_intra` engine patch. The AMD overlay (`modelserver/amd/vllm/`) and MetaX vLLM overlay (`modelserver/metax/vllm/`) provide vLLM P/D.
 > * On the NIXL transfer backend, SGLang has no explicit prefill-side free-notification (as vLLM does) and no prefill-side reclaim timeout, so a request cancelled before the decode initiates the transfer can strand KV cache on the prefill until the pod restarts. See the [SGLang operations doc](../../docs/operations/disaggregation/sglang.md).
 
 <details>
 <summary><h4>Deploying on MetaX C500X</h4></summary>
 
-This overlay is a reduced compatibility configuration: **1 Prefill + 1 Decode**, each `TP=1` on `metax-tech.com/gpu`, serving `Qwen/Qwen3-14B` over `NixlConnector` and the llm-d routing sidecar (`nixlv2`). It is not a production xPyD sizing example.
+**vLLM (NixlConnector, TCP).** Reduced compatibility configuration: **1 Prefill + 1 Decode**, each `TP=1` on `metax-tech.com/gpu`, serving `Qwen/Qwen3-14B` over `NixlConnector` and the llm-d routing sidecar (`nixlv2`). It is not a production xPyD sizing example.
 
 Prerequisites:
 
@@ -293,6 +296,14 @@ Prerequisites:
 ```bash
 kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/metax/vllm
 ```
+
+**SGLang (Mooncake, intra-node).** Reduced 1P+1D / `Qwen/Qwen3-0.6B` / TP=1. Prefill and decode launch `python3 -m sglang.launch_server` with `--disaggregation-mode={prefill,decode}` and `--disaggregation-transfer-backend=mooncake`. Because this MetaX SGLang image's Mooncake engine defaults to RDMA, the container entrypoint patches `mooncake_transfer_engine.py` to `nvlink_intra` and sets `SGLANG_MOONCAKE_CUSTOM_MEM_POOL=INTRA_NODE_NVLINK` plus `MC_INTRANODE_NVLINK=true`. Prefill exposes bootstrap port `8998`. The decode sidecar is `--kv-connector=sglang`. Requires `runtimeClassName: metax` and `hostIPC: true`.
+
+```bash
+kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/metax/sglang
+```
+
+Air-gapped sites can replace `--model-path` with a local `hostPath` mount (for example `/models/Qwen3-0.6B`) and set `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1`. Pull the MetaX SGLang image from `cr.metax-tech.com/public-ai-release/maca/sglang` (add an `imagePullSecret` if the registry is private).
 
 Re-measure `peakPrefillThroughput` in the router values for this model and card before performance work. An aggregated C500X / Qwen3-14B / TP=1 calibration was **5773** tok/s; the default `pd-disaggregation.values.yaml` figure is for gpt-oss-120b on NVIDIA and is not valid here.
 
@@ -480,6 +491,12 @@ If you deployed the SGLang overlay, delete that path instead of the vLLM one:
 
 ```bash
 kubectl delete -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/gpu/sglang/${INFRA_PROVIDER}
+```
+
+For MetaX C500X SGLang:
+
+```bash
+kubectl delete -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/metax/sglang
 ```
 
 </details>

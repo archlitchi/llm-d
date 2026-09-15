@@ -80,7 +80,7 @@ The RDMA overlay (`modelserver/xpu/vllm-rdma/`) reuses the standard XPU vLLM bas
 
 ## MetaX C500X
 
-MetaX C500X GPUs are supported for community-contributed well-lit paths. The device plugin must expose `metax-tech.com/gpu`. P/D disaggregation uses vLLM `NixlConnector` over TCP; see the [P/D Disaggregation guide](../../guides/pd-disaggregation/README.md) MetaX overlay (`modelserver/metax/vllm/`).
+MetaX C500X GPUs are supported for community-contributed well-lit paths. The device plugin must expose `metax-tech.com/gpu`. Aggregated serving has vLLM (`modelserver/metax/vllm/`) and SGLang (`modelserver/metax/sglang/`) overlays in the [Optimized Baseline guide](../../guides/optimized-baseline/README.md). P/D disaggregation has vLLM `NixlConnector` over TCP and SGLang Mooncake with intra-node `nvlink_intra`; see the [P/D Disaggregation guide](../../guides/pd-disaggregation/README.md).
 
 ## Rebellions NPU
 

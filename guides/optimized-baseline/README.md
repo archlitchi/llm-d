@@ -42,6 +42,7 @@ This guide includes configurations for the following accelerators:
 | Google TPU v7       | `tpu/v7`           | GKE TPU                                                         |
 | Rebellions NPU      | `npu`              | Rebellions NPU via DRA                                          |
 | CPU                 | `cpu`              | x86 with bf16 acceleration                                      |
+| MetaX GPU           | `metax`            | MetaX C500X, community contributed. vLLM (`modelserver/metax/vllm/`) and SGLang (`modelserver/metax/sglang/`, reduced 1 replica / Qwen3-0.6B / TP=1). |
 
 > [!NOTE]
 > "x86 with bf16 acceleration": AMX or AVX512-BF16 (Intel Sapphire Rapids+ / GCP C3, AMD Zen 4+); 64 cores + 64GB RAM per replica. Older CPUs without AMX/AVX512-BF16 (e.g. Cascade/Ice Lake) crash on the bf16 model unless run with `--dtype=float32`
@@ -83,7 +84,7 @@ export HF_TOKEN=HF_TOKEN_PLACEHOLDER
 ```bash
 export MONITORING_VALUES=
 export PROVIDER_NAME=none # options: none, gke, agentgateway, istio
-export ACCELERATOR_TYPE=gpu # options: gpu, amd, xpu, hpu, tpu/v6, tpu/v7, npu, cpu
+export ACCELERATOR_TYPE=gpu # options: gpu, amd, xpu, hpu, tpu/v6, tpu/v7, npu, cpu, metax
 export MODEL_SERVER=vllm # options: vllm, sglang, trtllm
 export INFRA_PROVIDER=base # options: base, gke
 export MODEL=Qwen/Qwen3-32B
@@ -256,7 +257,7 @@ Apply the Kustomize overlays for your specific backend:
 kubectl apply -n ${NAMESPACE} \
   -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/${ACCELERATOR_TYPE}/${MODEL_SERVER}/${INFRA_PROVIDER}/
 
-# only when ACCELERATOR_TYPE=amd or xpu or hpu or tpu/v6 or tpu/v7 or npu or cpu:
+# only when ACCELERATOR_TYPE=amd or xpu or hpu or tpu/v6 or tpu/v7 or npu or cpu or metax:
 #
 # Comment out the above `kubectl apply` and uncomment the below to run on `NON GPU` accelerators
 #
@@ -278,6 +279,35 @@ For example to deploy other models:
 # NVIDIA GPU / vLLM — openai/gpt-oss-120b
 kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/gpu/vllm/gpt-oss/
 ```
+
+</details>
+
+<details>
+<summary><h4>Deploying on MetaX C500X</h4></summary>
+
+This overlay is a reduced compatibility configuration, not a production sizing example. The device plugin must expose `metax-tech.com/gpu`. UCX on this path is `maca_ipc,maca_copy,tcp` — do not copy NVIDIA `cuda_ipc` / `cuda_copy` values. Requires `runtimeClassName: metax`. Air-gapped sites can replace `--model-path` with a local `hostPath` mount and set `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1`.
+
+**vLLM.** Two replicas of `deepseek-ai/DeepSeek-R1-Distill-Llama-70B` at TP=8:
+
+```bash
+export ACCELERATOR_TYPE=metax
+export MODEL_SERVER=vllm
+export MODEL=deepseek-ai/DeepSeek-R1-Distill-Llama-70B
+
+kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/metax/vllm
+```
+
+**SGLang (aggregated, no P/D).** One replica of `Qwen/Qwen3-0.6B` at TP=1. Launch is `python3 -m sglang.launch_server` without `--disaggregation-mode`. Image: `cr.metax-tech.com/public-ai-release/maca/sglang` (add an `imagePullSecret` if the registry is private). Pair it with the [llm-d Router](#1-deploy-the-llm-d-router) using `llm-d.ai/guide: optimized-baseline` (already set in [`router/optimized-baseline.values.yaml`](./router/optimized-baseline.values.yaml)). Qwen3 chat completions may emit a `<think>` channel unless the client sets `chat_template_kwargs.enable_thinking=false`.
+
+```bash
+export ACCELERATOR_TYPE=metax
+export MODEL_SERVER=sglang
+export MODEL=Qwen/Qwen3-0.6B
+
+kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/metax/sglang
+```
+
+Re-measure `peakPrefillThroughput` for this model and card before performance work; the default in `optimized-baseline.values.yaml` is for Qwen3-32B on NVIDIA H100.
 
 </details>
 
@@ -504,7 +534,7 @@ helm uninstall ${GUIDE_NAME} -n ${NAMESPACE}
 # only when ACCELERATOR_TYPE=gpu:
 kubectl delete -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/${ACCELERATOR_TYPE}/${MODEL_SERVER}/${INFRA_PROVIDER}
 
-# only when ACCELERATOR_TYPE=amd or xpu or hpu or tpu/v6 or tpu/v7 or npu or cpu:
+# only when ACCELERATOR_TYPE=amd or xpu or hpu or tpu/v6 or tpu/v7 or npu or cpu or metax:
 #
 # Comment out the above `kubectl delete` and uncomment the below to run on `NON GPU` accelerators
 #
