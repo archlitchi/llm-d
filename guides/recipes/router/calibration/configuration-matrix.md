@@ -28,6 +28,7 @@ rows because the serving engine changes prefill throughput.
 | `amd/vllm`    | AMD GPU · vLLM             | rocm v0.7.0          | 2 | Qwen3-32B               | 15928 ‡ |
 | `amd/sglang`  | AMD GPU · SGLang          | v0.5.13.post1 (rocm) | 2 | Qwen3-32B               | 30720 ‡ |
 | `metax/vllm` | MetaX C500X 64 GB · vLLM-MetaX | 0.24.0 (MACA 3.8.2.1) | 8 | DeepSeek-R1-Distill-Llama-70B | **5468** |
+| `biren/vllm` | Biren 166M · vLLM-Biren        | 26.08.25831-pd-ready | 4 | Qwen2.5-72B GPTQ-Int8 (`Qwen72B_INT8`) | **2251** |
 | `tpu/v6/vllm` | Google TPU v6e · vLLM     | tpu v0.22.0          | 8 | Qwen3-32B               | **26290** |
 | `tpu/v7/vllm` | Google TPU v7x · vLLM     | tpu v0.22.0          | 8 | Qwen3-32B               | **27336** |
 | `npu/vllm`  | Rebellions NPU · vLLM       | vllm-rbln 0.11.3a7 | 1 | gpt-oss-120B          | **12582** |
@@ -52,6 +53,13 @@ rows because the serving engine changes prefill throughput.
   TP=8, `CHUNK_SIZE=4095`). The single-GPU value is the higher of two valid runs
   (5361 and 5773 tokens/sec). The eight-GPU chunk size stays below that profile's
   `--max-model-len=4096` so the calibration prompt plus one output token fits.
+- **2251 / 1465** — measured on Biren 166M for Qwen2.5-72B GPTQ-Int8 (`Qwen72B_INT8`,
+  TP=4, `CHUNK_SIZE=3071`). **2251** is the optimized-baseline `biren/vllm` co-located
+  engine (no NIXL). **1465** is the pd-disaggregation path through EPP + NIXL KV
+  transfer + routing sidecar. The chunk stays below `--max-model-len=3072` so the
+  calibration prompt plus one output token fits. Raising the same co-located engine
+  to TP=8 (eight 166M GPUs on one node) measured **2438** tok/s — only about +8%
+  over TP=4, so the overlay stays at TP=4.
 - The other GPU/TPU paths run at the vLLM default `--max-num-batched-tokens=8192`, so
   calibrate those with `CHUNK_SIZE=8192`. **Re-measure** if you change TP, chunk size,
   quantization, or `--max-model-len` — those move the number more than the model identity does.
@@ -67,6 +75,8 @@ rows because the serving engine changes prefill throughput.
 **Related (other guides):** the [agentic-serving](../../../agentic-serving) guide ships
 `peakPrefillThroughput=16444` for Qwen3-Coder-480B-FP8 on TPU v7x (TP=8) — same accelerator
 family, different model, so it is not an optimized-baseline path but is a useful second data point.
+The [pd-disaggregation](../../../pd-disaggregation) Biren overlay measured
+`peakPrefillThroughput=1465` for the same model and TP through the full P/D path.
 
 ## Filling a cell
 
