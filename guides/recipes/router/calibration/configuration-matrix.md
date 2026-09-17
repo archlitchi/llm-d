@@ -54,8 +54,11 @@ rows because the serving engine changes prefill throughput.
   (5361 and 5773 tokens/sec). The eight-GPU chunk size stays below that profile's
   `--max-model-len=4096` so the calibration prompt plus one output token fits.
 - **10259 / 7812** — measured on Moore Threads MTT S5000 (8 GPUs, SGLang
-  `sglang-dsv4:1.0`, colocated TP=8 EP=8, no PD) for `mthreads/sglang`
-  (DeepSeek-V4-Flash-0731-FP8-mt). **10259** is `CHUNK_SIZE=8192` (llm-d default). 
+  `sglang-dsv4:1.0`, colocated TP=8 EP=8) for optimized-baseline
+  `mthreads/sglang` (DeepSeek-V4-Flash-0731-FP8-mt). **10259** is
+  `CHUNK_SIZE=8192` (llm-d default). The [pd-disaggregation](../../../pd-disaggregation)
+  overlay `mthreads/sglang/base` is the same model and card with Mooncake P/D; re-measure
+  before using 10259 as an operational ceiling there. 
 - The other GPU/TPU paths run at the vLLM default `--max-num-batched-tokens=8192`, so
   calibrate those with `CHUNK_SIZE=8192`. **Re-measure** if you change TP, chunk size,
   quantization, or `--max-model-len` — those move the number more than the model identity does.

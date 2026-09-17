@@ -285,7 +285,7 @@ kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/g
 <details>
 <summary><h4>Deploying on Moore Threads S5000 (colocated, no PD)</h4></summary>
 
-This overlay serves **DeepSeek-V4-Flash-0731-FP8-mt** on one 8×S5000 node with SGLang `--tp 8 --ep 8`. Prefill and decode stay in the same process. It is the path to use when a second machine is not available.
+This overlay serves **DeepSeek-V4-Flash-0731-FP8-mt** on one 8×S5000 node with SGLang `--tp 8 --ep 8`. Prefill and decode stay in the same process. It is the path to use when a second machine is not available. For two 8-GPU nodes, use the [pd-disaggregation Moore Threads overlay](../pd-disaggregation/README.md).
 
 Prerequisites and calibration notes: [accelerators.md](../../docs/getting-started/accelerators.md#moore-threads-s5000) and the [calibration matrix](../recipes/router/calibration/configuration-matrix.md).
 

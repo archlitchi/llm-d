@@ -85,7 +85,10 @@ MetaX C500X GPUs are supported for community-contributed well-lit paths. The dev
 
 ## Moore Threads S5000
 
-Moore Threads MTT S5000 GPUs are supported for a community-contributed optimized-baseline overlay. The path is **colocated SGLang** (Prefill and Decode in one process, `--tp 8 --ep 8` on a single 8-GPU node). It does **not** use P/D disaggregation.
+Moore Threads MTT S5000 GPUs are supported for community-contributed well-lit paths with SGLang:
+
+- **Colocated** (one 8-GPU node): [`guides/optimized-baseline/modelserver/mthreads/sglang`](../../guides/optimized-baseline/modelserver/mthreads/sglang/) — Prefill and Decode in one process (`--tp 8 --ep 8`).
+- **P/D disaggregation** (two 8-GPU nodes): [`guides/pd-disaggregation/modelserver/mthreads/sglang/base`](../../guides/pd-disaggregation/modelserver/mthreads/sglang/base/) — 1P+1D, each TP=8, Mooncake KV transfer.
 
 **Cluster prerequisites:**
 
@@ -93,14 +96,15 @@ Moore Threads MTT S5000 GPUs are supported for a community-contributed optimized
 - RuntimeClass `mthreads`
 - Image `registry.mthreads.com/devtech/sglang-dsv4:1.0` (air-gapped sites can retag)
 - Weights for `DeepSeek-V4-Flash-0731-FP8-mt` mounted at `/data` (`hostPath` in the overlay)
+- For P/D: InfiniBand device plugin exposing `rdma/ib` (edit the resource name if yours differs). Load `mt_peermem` on the **nodes** for GPUDirect RDMA. Pods request `IPC_LOCK` and are not privileged.
 
-Apply [`guides/optimized-baseline/modelserver/mthreads/sglang`](../../guides/optimized-baseline/modelserver/mthreads/sglang/) with `ACCELERATOR_TYPE=mthreads` and `MODEL_SERVER=sglang` (uncomment the non-GPU `kubectl apply` in the guide, same as AMD/XPU/NPU). The measured `peakPrefillThroughput` is **10259** (`CHUNK_SIZE=8192`); see the [calibration matrix](../../guides/recipes/router/calibration/configuration-matrix.md) and [Adapting to other hardware](../../guides/optimized-baseline/README.md#adapting-to-other-hardware).
+Apply the optimized-baseline overlay with `ACCELERATOR_TYPE=mthreads` and `MODEL_SERVER=sglang` (uncomment the non-GPU `kubectl apply` in the guide, same as AMD/XPU/NPU). The measured colocated `peakPrefillThroughput` is **10259** (`CHUNK_SIZE=8192`); see the [calibration matrix](../../guides/recipes/router/calibration/configuration-matrix.md) and [Adapting to other hardware](../../guides/optimized-baseline/README.md#adapting-to-other-hardware). Re-measure before using that number on the P/D overlay.
 
-If the device resource name on your cluster is not `mthreads.com/gpu`, edit `patch-sglang.yaml`. Startup can take 10–15 minutes (weight load + first warmup); the overlay sets `progressDeadlineSeconds: 7200` and a 60-minute startup probe budget. Weights are local on `hostPath: /data`, so the HuggingFace token secret is optional.
+If the GPU resource name on your cluster is not `mthreads.com/gpu`, edit the overlay patches. Startup can take 10–15 minutes (weight load + first warmup); both overlays set `progressDeadlineSeconds: 7200` and a 60-minute startup probe budget. Weights are local on `hostPath: /data`, so the HuggingFace token secret is optional.
 
-**Set `MODEL` when running the guide's steps.** The overlay serves `/data/models/DeepSeek-V4-Flash-0731-FP8-mt/`; export that exact `/v1/models` id for verification and benchmarks.
+**Set `MODEL` when running the guide's steps.** The overlays serve `/data/models/DeepSeek-V4-Flash-0731-FP8-mt/`; export that exact `/v1/models` id for verification and benchmarks.
 
-**Out of scope for this overlay:** P/D disaggregation (needs a second 8-GPU node), wide expert-parallelism across nodes, and more than one replica on a single 8-GPU host.
+**Out of scope:** wide expert-parallelism across more than two nodes, and more than one replica of a given role on a single 8-GPU host.
 
 ## Rebellions NPU
 

@@ -57,6 +57,7 @@ This guide includes configuration for the following accelerators:
 | MetaX GPU           | `modelserver/metax/vllm/`  | MetaX C500X, community contributed. Reduced 1P+1D / Qwen3-14B / TP=1 for compatibility checks. |
 | Intel XPU           | `modelserver/xpu/vllm/`    | Intel Data Center GPU Max 1550+, community contributed   |
 | Intel XPU + RDMA    | `modelserver/xpu/vllm-rdma/` | Intel XPU with RDMA via UCX (`ib,rc,ze_copy`), requires RDMA DRA driver |
+| Moore Threads GPU (SGLang) | `modelserver/mthreads/sglang/` | MTT S5000, 1P+1D TP=8, Mooncake KV, community contributed |
 
 > [!NOTE]
 > Some hardware variants use reduced configurations (fewer replicas, smaller models) to enable CI testing for compatibility and regression checks. These configurations are maintained by their respective hardware vendors and are not guaranteed as production-ready examples. Users deploying on non-default hardware should review and adjust the configurations for their environment.
@@ -66,12 +67,13 @@ This guide includes configuration for the following accelerators:
 P/D disaggregation requires a KV transfer backend to move KV cache blocks from prefill workers to decode workers. The transfer backend is configured via vLLM's `--kv-transfer-config` flag.
 
 > [!NOTE]
-> The following table represents vLLM's KVTransfer compatibility. SGLang also supports these KVTransfer backends but its implementation will look different and is coming soon.
+> The following table is primarily vLLM's KVTransfer compatibility. SGLang uses engine flags (`--disaggregation-transfer-backend`) rather than vLLM `--kv-transfer-config`; the Moore Threads overlay is the SGLang Mooncake example.
 
 | Connector | Overlay | Transport | Notes |
 | --------- | ------- | --------- | ----- |
 | NixlConnector | `base`, `coreweave`, `gke` | UCX (RDMA / TCP) | Default. Supports heterogeneous TP across P/D. |
 | MooncakeConnector | `cks-mooncake` | RDMA via Mooncake Transfer Engine | Requires same TP on prefill and decode. CKS with InfiniBand. |
+| SGLang mooncake | `mthreads/sglang` | RDMA via Mooncake Transfer Engine | SGLang `--disaggregation-transfer-backend mooncake` (not vLLM `MooncakeConnector`). Same TP on prefill and decode. |
 
 The `base` overlay uses NixlConnector and works on most clusters. Alternative overlays swap the connector and add infrastructure-specific configuration (e.g., RDMA device requests).
 
@@ -273,7 +275,7 @@ SGLang-specific notes:
 >
 > * Disaggregation lives in the llm-d Router (EPP) and is engine-agnostic, so SGLang P/D composes with the same prefix-cache-aware and load-aware routing as vLLM.
 > * SGLang P/D is **validated each release** on NVIDIA GPU but is not yet part of the nightly E2E CI that covers the vLLM path (the badges above).
-> * The SGLang P/D overlays are **NVIDIA GPU only** today; the AMD overlay (`modelserver/amd/vllm/`) and MetaX overlay (`modelserver/metax/vllm/`) provide vLLM P/D only.
+> * SGLang P/D overlays exist for NVIDIA GPU (`modelserver/gpu/sglang/`) and Moore Threads S5000 (`modelserver/mthreads/sglang/`); the AMD overlay (`modelserver/amd/vllm/`) and MetaX overlay (`modelserver/metax/vllm/`) provide vLLM P/D only.
 > * On the NIXL transfer backend, SGLang has no explicit prefill-side free-notification (as vLLM does) and no prefill-side reclaim timeout, so a request cancelled before the decode initiates the transfer can strand KV cache on the prefill until the pod restarts. See the [SGLang operations doc](../../docs/operations/disaggregation/sglang.md).
 
 <details>
@@ -297,6 +299,32 @@ kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/m
 Re-measure `peakPrefillThroughput` in the router values for this model and card before performance work. An aggregated C500X / Qwen3-14B / TP=1 calibration was **5773** tok/s; the default `pd-disaggregation.values.yaml` figure is for gpt-oss-120b on NVIDIA and is not valid here.
 
 Qwen3 chat completions may emit a `<think>` channel unless the client sets `chat_template_kwargs.enable_thinking=false`. Verify P/D with Router `/v1/completions` or `/v1/chat/completions`, then confirm decode logs show an external prefix-cache hit / successful KV transfer rather than decode-only recompute.
+
+</details>
+
+<details>
+<summary><h4>Deploying on Moore Threads S5000 (SGLang P/D)</h4></summary>
+
+This overlay is **1 Prefill + 1 Decode**, each `TP=8` (prefill also `EP=8`) on `mthreads.com/gpu`, serving `DeepSeek-V4-Flash-0731-FP8-mt` with SGLang `--disaggregation-transfer-backend mooncake`. It needs **two** 8-GPU nodes. For a single 8-GPU node, use the [optimized-baseline colocated overlay](../optimized-baseline/README.md).
+
+Prerequisites:
+
+* Moore Threads GPU Operator / device plugin exposing `mthreads.com/gpu`, plus RuntimeClass `mthreads`.
+* InfiniBand device plugin exposing `rdma/ib` (edit the resource name in the patches if yours differs, e.g. `rdma/hca` or `rdma/roce_gdr`). `mt_peermem` is a **node** module for GPUDirect RDMA; 
+* Image `registry.mthreads.com/devtech/sglang-dsv4:1.0` (air-gapped sites can retag).
+* Pods get `IPC_LOCK` and Unconfined seccomp so Mooncake can pin memory. They are not privileged.
+* Prefill↔Decode reachability on HTTP 8000/8200 and Mooncake bootstrap TCP **8998**, plus RDMA between the injected IB devices.
+
+```bash
+export ACCELERATOR_TYPE=mthreads
+export MODEL_SERVER=sglang
+export MODEL=/data/models/DeepSeek-V4-Flash-0731-FP8-mt/
+
+kubectl apply -n ${NAMESPACE} \
+  -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/mthreads/sglang/base
+```
+
+Re-measure `peakPrefillThroughput` in the router values for this model and card before performance work. The colocated S5000 calibration is **10259** tok/s (`CHUNK_SIZE=8192`);
 
 </details>
 
@@ -480,6 +508,15 @@ If you deployed the SGLang overlay, delete that path instead of the vLLM one:
 
 ```bash
 kubectl delete -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/gpu/sglang/${INFRA_PROVIDER}
+```
+
+</details>
+
+<details>
+<summary><h4>Cleanup for Moore Threads SGLang</h4></summary>
+
+```bash
+kubectl delete -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/mthreads/sglang/base
 ```
 
 </details>
