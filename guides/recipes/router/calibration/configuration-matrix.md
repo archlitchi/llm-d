@@ -28,6 +28,7 @@ rows because the serving engine changes prefill throughput.
 | `amd/vllm`    | AMD GPU · vLLM             | rocm v0.7.0          | 2 | Qwen3-32B               | 15928 ‡ |
 | `amd/sglang`  | AMD GPU · SGLang          | v0.5.13.post1 (rocm) | 2 | Qwen3-32B               | 30720 ‡ |
 | `metax/vllm` | MetaX C500X 64 GB · vLLM-MetaX | 0.24.0 (MACA 3.8.2.1) | 8 | DeepSeek-R1-Distill-Llama-70B | **5468** |
+| `mthreads/sglang` | MTT S5000 80 GB · SGLang-dsv4 | 1.0 | 8 | DeepSeek-V4-Flash-0731-FP8-mt | **10259** |
 | `tpu/v6/vllm` | Google TPU v6e · vLLM     | tpu v0.22.0          | 8 | Qwen3-32B               | **26290** |
 | `tpu/v7/vllm` | Google TPU v7x · vLLM     | tpu v0.22.0          | 8 | Qwen3-32B               | **27336** |
 | `npu/vllm`  | Rebellions NPU · vLLM       | vllm-rbln 0.11.3a7 | 1 | gpt-oss-120B          | **12582** |
@@ -52,6 +53,9 @@ rows because the serving engine changes prefill throughput.
   TP=8, `CHUNK_SIZE=4095`). The single-GPU value is the higher of two valid runs
   (5361 and 5773 tokens/sec). The eight-GPU chunk size stays below that profile's
   `--max-model-len=4096` so the calibration prompt plus one output token fits.
+- **10259 / 7812** — measured on Moore Threads MTT S5000 (8 GPUs, SGLang
+  `sglang-dsv4:1.0`, colocated TP=8 EP=8, no PD) for `mthreads/sglang`
+  (DeepSeek-V4-Flash-0731-FP8-mt). **10259** is `CHUNK_SIZE=8192` (llm-d default). 
 - The other GPU/TPU paths run at the vLLM default `--max-num-batched-tokens=8192`, so
   calibrate those with `CHUNK_SIZE=8192`. **Re-measure** if you change TP, chunk size,
   quantization, or `--max-model-len` — those move the number more than the model identity does.

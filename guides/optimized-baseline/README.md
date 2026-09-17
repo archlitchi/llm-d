@@ -41,6 +41,7 @@ This guide includes configurations for the following accelerators:
 | Google TPU v6e      | `tpu/v6`           | GKE TPU                                                         |
 | Google TPU v7       | `tpu/v7`           | GKE TPU                                                         |
 | Rebellions NPU      | `npu`              | Rebellions NPU via DRA                                          |
+| Moore Threads GPU   | `mthreads`         | MTT S5000, colocated SGLang DeepSeek-V4-Flash (no PD)           |
 | CPU                 | `cpu`              | x86 with bf16 acceleration                                      |
 
 > [!NOTE]
@@ -83,7 +84,7 @@ export HF_TOKEN=HF_TOKEN_PLACEHOLDER
 ```bash
 export MONITORING_VALUES=
 export PROVIDER_NAME=none # options: none, gke, agentgateway, istio
-export ACCELERATOR_TYPE=gpu # options: gpu, amd, xpu, hpu, tpu/v6, tpu/v7, npu, cpu
+export ACCELERATOR_TYPE=gpu # options: gpu, amd, xpu, hpu, tpu/v6, tpu/v7, npu, cpu, mthreads
 export MODEL_SERVER=vllm # options: vllm, sglang, trtllm
 export INFRA_PROVIDER=base # options: base, gke
 export MODEL=Qwen/Qwen3-32B
@@ -256,7 +257,7 @@ Apply the Kustomize overlays for your specific backend:
 kubectl apply -n ${NAMESPACE} \
   -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/${ACCELERATOR_TYPE}/${MODEL_SERVER}/${INFRA_PROVIDER}/
 
-# only when ACCELERATOR_TYPE=amd or xpu or hpu or tpu/v6 or tpu/v7 or npu or cpu:
+# only when ACCELERATOR_TYPE=amd or xpu or hpu or tpu/v6 or tpu/v7 or npu or cpu or mthreads:
 #
 # Comment out the above `kubectl apply` and uncomment the below to run on `NON GPU` accelerators
 #
@@ -278,6 +279,32 @@ For example to deploy other models:
 # NVIDIA GPU / vLLM — openai/gpt-oss-120b
 kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/gpu/vllm/gpt-oss/
 ```
+
+</details>
+
+<details>
+<summary><h4>Deploying on Moore Threads S5000 (colocated, no PD)</h4></summary>
+
+This overlay serves **DeepSeek-V4-Flash-0731-FP8-mt** on one 8×S5000 node with SGLang `--tp 8 --ep 8`. Prefill and decode stay in the same process. It is the path to use when a second machine is not available.
+
+Prerequisites and calibration notes: [accelerators.md](../../docs/getting-started/accelerators.md#moore-threads-s5000) and the [calibration matrix](../recipes/router/calibration/configuration-matrix.md).
+
+```bash
+export ACCELERATOR_TYPE=mthreads
+export MODEL_SERVER=sglang
+export MODEL=/data/models/DeepSeek-V4-Flash-0731-FP8-mt/
+```
+
+Uncomment the non-GPU `kubectl apply` in the step above (or apply the overlay directly):
+
+```bash
+kubectl apply -n ${NAMESPACE} \
+  -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/mthreads/sglang/
+```
+
+The measured `peakPrefillThroughput` for this overlay is **10259** tok/s (`CHUNK_SIZE=8192`); see [Adapting to other hardware](#adapting-to-other-hardware) and the [calibration matrix](../recipes/router/calibration/configuration-matrix.md).
+
+Set `MODEL` to the exact `/v1/models` id before verification and `llmdbenchmark`.
 
 </details>
 
@@ -504,7 +531,7 @@ helm uninstall ${GUIDE_NAME} -n ${NAMESPACE}
 # only when ACCELERATOR_TYPE=gpu:
 kubectl delete -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/${ACCELERATOR_TYPE}/${MODEL_SERVER}/${INFRA_PROVIDER}
 
-# only when ACCELERATOR_TYPE=amd or xpu or hpu or tpu/v6 or tpu/v7 or npu or cpu:
+# only when ACCELERATOR_TYPE=amd or xpu or hpu or tpu/v6 or tpu/v7 or npu or cpu or mthreads:
 #
 # Comment out the above `kubectl delete` and uncomment the below to run on `NON GPU` accelerators
 #

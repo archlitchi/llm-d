@@ -13,6 +13,7 @@ Maintainers for each accelerator type are listed below. See our well-lit path gu
 | Google | [TPU](../infrastructure/providers/gke/README.md#llm-d-on-google-kubernetes-engine-gke) | Edwin Hernandez (@Edwinhr716), Cong Liu (@liu-cong, <congliu.thu@gmail.com>) |
 | Intel | XPU | Yuan Wu (@yuanwu2017, <yuan.wu@intel.com>) |
 | MetaX | C500X GPU | Lianjie Zhang (@lianjiezh, <lianjie.zhang@metax-tech.com>), Mengxuan Li (@archlitchi, <mengxuan.li@dynamia.ai>) |
+| Moore Threads | MTT S5000 GPU | community-contributed overlay (`modelserver/mthreads/sglang`) |
 | NVIDIA | GPU | Will Eaton (<weaton@redhat.com>), Greg (<grpereir@redhat.com>) |
 | Rebellions | NPU | Jinmoo Seok (@rebel-jinmoo, <jinmoo_seok@rebellions.ai>), Minwook Ahn (@rebel-minwook, <minwook.ahn@rebellions.ai>), Minho Park (@rebel-minhopark, <minho.park@rebellions.ai>) |
 
@@ -81,6 +82,25 @@ The RDMA overlay (`modelserver/xpu/vllm-rdma/`) reuses the standard XPU vLLM bas
 ## MetaX C500X
 
 MetaX C500X GPUs are supported for community-contributed well-lit paths. The device plugin must expose `metax-tech.com/gpu`. P/D disaggregation uses vLLM `NixlConnector` over TCP; see the [P/D Disaggregation guide](../../guides/pd-disaggregation/README.md) MetaX overlay (`modelserver/metax/vllm/`).
+
+## Moore Threads S5000
+
+Moore Threads MTT S5000 GPUs are supported for a community-contributed optimized-baseline overlay. The path is **colocated SGLang** (Prefill and Decode in one process, `--tp 8 --ep 8` on a single 8-GPU node). It does **not** use P/D disaggregation.
+
+**Cluster prerequisites:**
+
+- Moore Threads GPU Operator / device plugin exposing `mthreads.com/gpu`
+- RuntimeClass `mthreads`
+- Image `registry.mthreads.com/devtech/sglang-dsv4:1.0` (air-gapped sites can retag)
+- Weights for `DeepSeek-V4-Flash-0731-FP8-mt` mounted at `/data` (`hostPath` in the overlay)
+
+Apply [`guides/optimized-baseline/modelserver/mthreads/sglang`](../../guides/optimized-baseline/modelserver/mthreads/sglang/) with `ACCELERATOR_TYPE=mthreads` and `MODEL_SERVER=sglang` (uncomment the non-GPU `kubectl apply` in the guide, same as AMD/XPU/NPU). The measured `peakPrefillThroughput` is **10259** (`CHUNK_SIZE=8192`); see the [calibration matrix](../../guides/recipes/router/calibration/configuration-matrix.md) and [Adapting to other hardware](../../guides/optimized-baseline/README.md#adapting-to-other-hardware).
+
+If the device resource name on your cluster is not `mthreads.com/gpu`, edit `patch-sglang.yaml`. Startup can take 10–15 minutes (weight load + first warmup); the overlay sets `progressDeadlineSeconds: 7200` and a 60-minute startup probe budget. Weights are local on `hostPath: /data`, so the HuggingFace token secret is optional.
+
+**Set `MODEL` when running the guide's steps.** The overlay serves `/data/models/DeepSeek-V4-Flash-0731-FP8-mt/`; export that exact `/v1/models` id for verification and benchmarks.
+
+**Out of scope for this overlay:** P/D disaggregation (needs a second 8-GPU node), wide expert-parallelism across nodes, and more than one replica on a single 8-GPU host.
 
 ## Rebellions NPU
 
