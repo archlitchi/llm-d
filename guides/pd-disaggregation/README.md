@@ -310,10 +310,12 @@ This overlay is **1 Prefill + 1 Decode**, each `TP=8` (prefill also `EP=8`) on `
 Prerequisites:
 
 * Moore Threads GPU Operator / device plugin exposing `mthreads.com/gpu`, plus RuntimeClass `mthreads`.
-* InfiniBand device plugin exposing `rdma/ib` (edit the resource name in the patches if yours differs, e.g. `rdma/hca` or `rdma/roce_gdr`). `mt_peermem` is a **node** module for GPUDirect RDMA; 
+* InfiniBand device plugin exposing `rdma/ib` (edit the resource name in the patches if yours differs, e.g. `rdma/hca` or `rdma/roce_gdr`). `mt_peermem` is a **node** module for GPUDirect RDMA; load it on the node, do not request it as a Pod resource.
 * Image `registry.mthreads.com/devtech/sglang-dsv4:1.0` (air-gapped sites can retag).
 * Pods get `IPC_LOCK` and Unconfined seccomp so Mooncake can pin memory. They are not privileged.
 * Prefill↔Decode reachability on HTTP 8000/8200 and Mooncake bootstrap TCP **8998**, plus RDMA between the injected IB devices.
+
+The routing sidecar sets `bootstrap_host` to the InferencePool **Pod IP**. Mooncake then uses that address to pick the RDMA path (QP RTR). Requesting `rdma/ib`, or bind-mounting `/dev/infiniband`, is not enough if the RoCE GID is not on that IP — the transfer fails with `Failed to modify QP to RTR` / `No such device`. Give the Pod an IP on the RoCE NIC (Multus / SR-IOV, same idea as [CKS Mooncake](#supported-kv-transfer-backends): devices must be usable *inside* the pod netns). `hostNetwork` is a cluster-level fallback so `podIP` equals the node IP; do not bake it into this overlay.
 
 ```bash
 export ACCELERATOR_TYPE=mthreads
@@ -323,8 +325,6 @@ export MODEL=/data/models/DeepSeek-V4-Flash-0731-FP8-mt/
 kubectl apply -n ${NAMESPACE} \
   -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/mthreads/sglang/base
 ```
-
-Re-measure `peakPrefillThroughput` in the router values for this model and card before performance work. The colocated S5000 calibration is **10259** tok/s (`CHUNK_SIZE=8192`);
 
 </details>
 
