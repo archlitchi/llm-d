@@ -13,7 +13,7 @@ Maintainers for each accelerator type are listed below. See our well-lit path gu
 | Google | [TPU](../infrastructure/providers/gke/README.md#llm-d-on-google-kubernetes-engine-gke) | Edwin Hernandez (@Edwinhr716), Cong Liu (@liu-cong, <congliu.thu@gmail.com>) |
 | Intel | XPU | Yuan Wu (@yuanwu2017, <yuan.wu@intel.com>) |
 | MetaX | C500X GPU | Lianjie Zhang (@lianjiezh, <lianjie.zhang@metax-tech.com>), Mengxuan Li (@archlitchi, <mengxuan.li@dynamia.ai>) |
-| Moore Threads | MTT S5000 GPU | Adrian (@adrian-zhL, <zihan.liu@mthreads.com>), Mengxuan Li (@archlitchi, <mengxuan.li@dynamia.ai>) |
+| Moore Threads | MTT S5000 GPU | Adrian (@adrian-zhL, <zihan.liu@mthreads.com>), Jingzhi Xue (@gingerXue, <jingzhi.xue@mthreads.com>), Mengxuan Li (@archlitchi, <mengxuan.li@dynamia.ai>) |
 | NVIDIA | GPU | Will Eaton (<weaton@redhat.com>), Greg (<grpereir@redhat.com>) |
 | Rebellions | NPU | Jinmoo Seok (@rebel-jinmoo, <jinmoo_seok@rebellions.ai>), Minwook Ahn (@rebel-minwook, <minwook.ahn@rebellions.ai>), Minho Park (@rebel-minhopark, <minho.park@rebellions.ai>) |
 
@@ -83,12 +83,22 @@ The RDMA overlay (`modelserver/xpu/vllm-rdma/`) reuses the standard XPU vLLM bas
 
 MetaX C500X GPUs are supported for community-contributed well-lit paths. The device plugin must expose `metax-tech.com/gpu`. P/D disaggregation uses vLLM `NixlConnector` over TCP; see the [P/D Disaggregation guide](../../guides/pd-disaggregation/README.md) MetaX overlay (`modelserver/metax/vllm/`).
 
-## Moore Threads S5000
+## Moore Threads MTT S5000
 
-Moore Threads MTT S5000 GPUs are supported for community-contributed well-lit paths with SGLang:
+Moore Threads MTT S5000 GPUs are supported for community-contributed well-lit
+paths. The device plugin must expose `mthreads.com/gpu`.
+
+**vLLM**
+
+- **Colocated** (one 8-GPU node): [`guides/optimized-baseline/modelserver/mthreads/vllm`](../../guides/optimized-baseline/modelserver/mthreads/vllm/) — Qwen3-32B, TP=8.
+- **P/D disaggregation** (one 8-GPU node): [`guides/pd-disaggregation/modelserver/mthreads/vllm`](../../guides/pd-disaggregation/modelserver/mthreads/vllm/) — 1P TP=4 + 1D TP=4, vLLM `MooncakeConnector` over TCP/MUSA.
+
+**SGLang**
 
 - **Colocated** (one 8-GPU node): [`guides/optimized-baseline/modelserver/mthreads/sglang`](../../guides/optimized-baseline/modelserver/mthreads/sglang/) — Prefill and Decode in one process (`--tp 8 --ep 8`).
 - **P/D disaggregation** (two 8-GPU nodes): [`guides/pd-disaggregation/modelserver/mthreads/sglang/base`](../../guides/pd-disaggregation/modelserver/mthreads/sglang/base/) — 1P+1D, each TP=8, Mooncake KV transfer.
+
+See the [P/D Disaggregation guide](../../guides/pd-disaggregation/README.md) and the [optimized-baseline guide](../../guides/optimized-baseline/README.md).
 
 ## Rebellions NPU
 

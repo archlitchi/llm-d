@@ -41,7 +41,8 @@ This guide includes configurations for the following accelerators:
 | Google TPU v6e      | `tpu/v6`           | GKE TPU                                                         |
 | Google TPU v7       | `tpu/v7`           | GKE TPU                                                         |
 | Rebellions NPU      | `npu`              | Rebellions NPU via DRA                                          |
-| Moore Threads GPU   | `mthreads`         | MTT S5000, colocated SGLang DeepSeek-V4-Flash (no PD)           |
+| Moore Threads GPU (vLLM)   | `mthreads/vllm`    | MTT S5000, Qwen3-32B TP=8 single-node community validation |
+| Moore Threads GPU (SGLang) | `mthreads/sglang`  | MTT S5000, colocated SGLang DeepSeek-V4-Flash (no PD)           |
 | CPU                 | `cpu`              | x86 with bf16 acceleration                                      |
 
 > [!NOTE]
@@ -49,6 +50,19 @@ This guide includes configurations for the following accelerators:
 >
 >
 > Some hardware variants use reduced configurations (fewer replicas, smaller models) to enable CI testing for compatibility and regression checks. These configurations are maintained by their respective hardware vendors and are not guaranteed as production-ready examples. Users deploying on non-default hardware should review and adjust the configurations for their environment.
+
+The MThreads **vLLM** overlay is a single-replica TP validation profile: one
+`Qwen/Qwen3-32B` vLLM server, tensor parallelism 8, and eight
+`mthreads.com/gpu` resources in the pod. It uses the standalone Router/EPP
+path and the `llm-d-hf-token` Secret for model download. Set `ACCELERATOR_TYPE=mthreads`,
+`MODEL_SERVER=vllm`, and keep `MODEL=Qwen/Qwen3-32B` when following the
+deployment commands. The MThreads profile is not covered by the default H100 calibration
+value; measure `peakPrefillThroughput` on the target model and hardware before
+performance tuning.
+
+The MThreads **SGLang** overlay colocates prefill and decode for
+`DeepSeek-V4-Flash-0731-FP8-mt` (`--tp 8 --ep 8`) on one 8-GPU node. See
+[Deploying on Moore Threads S5000 (SGLang, colocated, no PD)](#deploying-on-moore-threads-s5000-sglang-colocated-no-pd).
 
 ## Prerequisites
 
@@ -283,11 +297,27 @@ kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/g
 </details>
 
 <details>
-<summary><h4>Deploying on Moore Threads S5000 (colocated, no PD)</h4></summary>
+<summary><h4>Deploying on Moore Threads S5000 (vLLM, colocated)</h4></summary>
+
+This overlay serves **Qwen3-32B** on one 8×S5000 node with vLLM `TP=8`. Set
+`ACCELERATOR_TYPE=mthreads`, `MODEL_SERVER=vllm`, and `MODEL=Qwen/Qwen3-32B`.
+
+```bash
+kubectl apply -n ${NAMESPACE} \
+  -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/mthreads/vllm/
+```
+
+`peakPrefillThroughput` for this overlay is still **TBD**; calibrate before
+performance claims. See the [calibration matrix](../recipes/router/calibration/configuration-matrix.md).
+
+</details>
+
+<details>
+<summary><h4>Deploying on Moore Threads S5000 (SGLang, colocated, no PD)</h4></summary>
 
 This overlay serves **DeepSeek-V4-Flash-0731-FP8-mt** on one 8×S5000 node with SGLang `--tp 8 --ep 8`. Prefill and decode stay in the same process. It is the path to use when a second machine is not available. For two 8-GPU nodes, use the [pd-disaggregation Moore Threads overlay](../pd-disaggregation/README.md).
 
-Prerequisites and calibration notes: [accelerators.md](../../docs/getting-started/accelerators.md#moore-threads-s5000) and the [calibration matrix](../recipes/router/calibration/configuration-matrix.md).
+Prerequisites and calibration notes: [accelerators.md](../../docs/getting-started/accelerators.md#moore-threads-mtt-s5000) and the [calibration matrix](../recipes/router/calibration/configuration-matrix.md).
 
 ```bash
 export ACCELERATOR_TYPE=mthreads

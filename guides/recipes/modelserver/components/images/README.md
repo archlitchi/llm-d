@@ -40,6 +40,8 @@ This directory contains Kustomize Components that define the **default container
 │   └── release
 ├── mthreads-sglang
 │   └── release
+├── mthreads-vllm
+│   └── release
 ├── npu-vllm
 │   └── release
 ├── routing-sidecar
