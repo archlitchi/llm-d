@@ -60,13 +60,6 @@ rows because the serving engine changes prefill throughput.
   `CHUNK_SIZE=8192` (llm-d default). The [pd-disaggregation](../../../pd-disaggregation)
   overlay `mthreads/sglang/base` is the same model and card with Mooncake P/D; re-measure
   before using 10259 as an operational ceiling there.
-- **MThreads vLLM is pending calibration** — the validated compatibility profile is
-  MTT S5000, Qwen3-32B, TP=8, and `CHUNK_SIZE=2048`. Do not reuse the H100
-  default (`15928`) as a measured MThreads result. Run `calibrate.sh` against
-  the live MThreads vLLM deployment and replace `TBD` before performance claims.
-- The other GPU/TPU paths run at the vLLM default `--max-num-batched-tokens=8192`, so
-  calibrate those with `CHUNK_SIZE=8192`. **Re-measure** if you change TP, chunk size,
-  quantization, or `--max-model-len` — those move the number more than the model identity does.
 - **`npu/vllm`** — gpt-oss-120B on one Rebellions NPU at dp1 and `--max-num-seqs=1`,
   `--max-num-batched-tokens=512`, so calibrate this path with `CHUNK_SIZE=512`. This path
   does not borrow a proxy: the closest measured row (`gpu/vllm/gpt-oss`, 39065) is an H100

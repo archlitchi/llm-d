@@ -296,48 +296,6 @@ kubectl apply -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/g
 
 </details>
 
-<details>
-<summary><h4>Deploying on Moore Threads S5000 (vLLM, colocated)</h4></summary>
-
-This overlay serves **Qwen3-32B** on one 8×S5000 node with vLLM `TP=8`. Set
-`ACCELERATOR_TYPE=mthreads`, `MODEL_SERVER=vllm`, and `MODEL=Qwen/Qwen3-32B`.
-
-```bash
-kubectl apply -n ${NAMESPACE} \
-  -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/mthreads/vllm/
-```
-
-`peakPrefillThroughput` for this overlay is still **TBD**; calibrate before
-performance claims. See the [calibration matrix](../recipes/router/calibration/configuration-matrix.md).
-
-</details>
-
-<details>
-<summary><h4>Deploying on Moore Threads S5000 (SGLang, colocated, no PD)</h4></summary>
-
-This overlay serves **DeepSeek-V4-Flash-0731-FP8-mt** on one 8×S5000 node with SGLang `--tp 8 --ep 8`. Prefill and decode stay in the same process. It is the path to use when a second machine is not available. For two 8-GPU nodes, use the [pd-disaggregation Moore Threads overlay](../pd-disaggregation/README.md).
-
-Prerequisites and calibration notes: [accelerators.md](../../docs/getting-started/accelerators.md#moore-threads-mtt-s5000) and the [calibration matrix](../recipes/router/calibration/configuration-matrix.md).
-
-```bash
-export ACCELERATOR_TYPE=mthreads
-export MODEL_SERVER=sglang
-export MODEL=/data/models/DeepSeek-V4-Flash-0731-FP8-mt/
-```
-
-Uncomment the non-GPU `kubectl apply` in the step above (or apply the overlay directly):
-
-```bash
-kubectl apply -n ${NAMESPACE} \
-  -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/mthreads/sglang/
-```
-
-The measured `peakPrefillThroughput` for this overlay is **10259** tok/s (`CHUNK_SIZE=8192`); see [Adapting to other hardware](#adapting-to-other-hardware) and the [calibration matrix](../recipes/router/calibration/configuration-matrix.md).
-
-Set `MODEL` to the exact `/v1/models` id before verification and `llmdbenchmark`.
-
-</details>
-
 ### 3. (Optional) Enable monitoring
 
 - Install the [Monitoring stack](../../docs/operations/observability/setup.md).

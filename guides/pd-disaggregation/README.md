@@ -305,9 +305,13 @@ Qwen3 chat completions may emit a `<think>` channel unless the client sets `chat
 </details>
 
 <details>
-<summary><h4>Deploying on Moore Threads S5000 (SGLang P/D)</h4></summary>
+<summary><h4>Deploying on Moore Threads MTT S5000</h4></summary>
 
-This overlay is **1 Prefill + 1 Decode**, each `TP=8` (prefill also `EP=8`) on `mthreads.com/gpu`, serving `DeepSeek-V4-Flash-0731-FP8-mt` with SGLang `--disaggregation-transfer-backend mooncake`. It needs **two** 8-GPU nodes. For a single 8-GPU node, use the [optimized-baseline colocated overlay](../optimized-baseline/README.md).
+Both overlays request `mthreads.com/gpu`. Choose SGLang or vLLM to match the image and topology.
+
+#### SGLang P/D
+
+**1 Prefill + 1 Decode**, each `TP=8` (prefill also `EP=8`), serving `DeepSeek-V4-Flash-0731-FP8-mt` with `--disaggregation-transfer-backend mooncake`. It needs **two** 8-GPU nodes. For a single 8-GPU node, use the [optimized-baseline colocated overlay](../optimized-baseline/README.md).
 
 Prerequisites:
 
@@ -328,16 +332,9 @@ kubectl apply -n ${NAMESPACE} \
   -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/mthreads/sglang/base
 ```
 
-</details>
+#### vLLM P/D
 
-<details>
-<summary><h4>Deploying on Moore Threads MTT S5000 (vLLM P/D)</h4></summary>
-
-The MThreads overlay is a single-node compatibility topology for **Qwen3-32B**:
-one Prefill Deployment with `TP=4` and one Decode Deployment with `TP=4`.
-Each Deployment requests four `mthreads.com/gpu` devices, so the topology
-consumes all eight GPUs on an MTT S5000 node. Both workers pull
-`Qwen/Qwen3-32B` from Hugging Face using the `llm-d-hf-token` Secret.
+Single-node compatibility topology for **Qwen3-32B**: one Prefill Deployment with `TP=4` and one Decode Deployment with `TP=4`. Each Deployment requests four `mthreads.com/gpu` devices, so the topology consumes all eight GPUs on an MTT S5000 node. Both workers pull `Qwen/Qwen3-32B` from Hugging Face using the `llm-d-hf-token` Secret.
 
 Prerequisites:
 
@@ -352,8 +349,6 @@ Prerequisites:
   `8998`, in addition to the Prefill and Decode HTTP ports (`8000` and `8200`).
   The transfer-engine data-plane RPC ports are allocated dynamically by
   Mooncake.
-
-Render and apply the modelserver overlay:
 
 ```bash
 export REPO_ROOT=$(realpath "$(git rev-parse --show-toplevel)")
@@ -372,7 +367,7 @@ completion request. This values file is sufficient for a functional smoke test,
 but its `peakPrefillThroughput: 33821` is an NVIDIA H200 reference value. Do
 not use it for MTT S5000 performance claims; first measure the MThreads
 Qwen3-32B TP=4 Prefill path with the calibration recipe and override the value.
-The MThreads overlay configures:
+The vLLM overlay configures:
 
 * Prefill: `MooncakeConnector`, `kv_role=kv_producer`,
   `mooncake_protocol=tcp`.
@@ -389,7 +384,7 @@ response alone is not sufficient:
 inspect the vLLM logs for `Using MUSA transport`, Mooncake bootstrap startup,
 and successful KV-transfer metrics.
 
-Treat this as a compatibility smoke test until a clean multi-hour soak and
+Treat the vLLM path as a compatibility smoke test until a clean multi-hour soak and
 hardware-specific calibration have been completed.
 
 </details>
@@ -579,18 +574,13 @@ kubectl delete -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/
 </details>
 
 <details>
-<summary><h4>Cleanup for Moore Threads SGLang</h4></summary>
+<summary><h4>Cleanup for Moore Threads</h4></summary>
 
 ```bash
+# SGLang
 kubectl delete -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/mthreads/sglang/base
-```
 
-</details>
-
-<details>
-<summary><h4>Cleanup for Moore Threads vLLM</h4></summary>
-
-```bash
+# vLLM
 kubectl delete -n ${NAMESPACE} -k ${REPO_ROOT}/guides/${GUIDE_NAME}/modelserver/mthreads/vllm
 ```
 
